@@ -1,5 +1,17 @@
 import React, {useEffect, useState} from 'react';
-import {cav, getContractInstance} from './klaytn/caver';
+import Caver from 'caver-js';
+
+const caver = new Caver('https://api.baobab.klaytn.net:8651');
+const deployedABI = require('./deployedABI.json');
+const DEPLOY_ADDRESS = '0xb4bF60383C64D47F2E667f2fE8F7ED0c9380f770';
+
+const getCountContract = () => {
+  const contractInstance = deployedABI
+      && DEPLOY_ADDRESS
+      && new caver.klay.Contract(deployedABI, DEPLOY_ADDRESS);
+  
+  return contractInstance;
+}
 
 const useInput = (initialState) => {
   const [value, setValue] = useState(initialState);
@@ -20,24 +32,21 @@ export default function App() {
   const privateKey = useInput('');
   const password = useInput('');
 
-  // 입력된 개인키로 지갑 연동
+  // 입력된 개인키 또는 키파일로 지갑 연동
   const integrate = async () => {
+    // 키파일로 연동시 키파일과 비밀번호로 개인키 찾아오기
     if(keystore) {
-      console.log('123',keystore, password.value)
-      let resule = await cav.klay.accounts.decrypt(keystore, password.value);
-      console.log(resule)
-      return;
-      //privateKey.value = cav.klay.accounts.decrypt(keystore, password.value);
+      privateKey.value = caver.klay.accounts.decrypt(keystore, password.value).privateKey;
     }
 
-    const walletInstance = cav.klay.accounts.privateKeyToAccount(privateKey.value);
+    const walletInstance = caver.klay.accounts.privateKeyToAccount(privateKey.value);
     sessionStorage.setItem('walletInstance', JSON.stringify(walletInstance));
     setValue(walletInstance);
   }
 
   // 지갑 연동 공통 부분 및 필요한 값 셋팅(address / balance / count)
   const setValue = (wallet) => {
-    cav.klay.accounts.wallet.add(wallet);
+    caver.klay.accounts.wallet.add(wallet);
     setAddress(wallet.address);
     checkBalance(wallet.address);
     getCount();
@@ -45,31 +54,31 @@ export default function App() {
 
   // 클레이 잔액 확인
   const checkBalance = async (address) => {
-    const balance = await cav.klay.getBalance(address);
-    setBalance(cav.utils.fromPeb(balance, 'KLAY'));
+    const balance = await caver.klay.getBalance(address);
+    setBalance(caver.utils.fromPeb(balance, 'KLAY'));
   }
 
   // 계정 연동 해제
   const removeWallet = () => {
-    cav.klay.accounts.wallet.clear();
+    caver.klay.accounts.wallet.clear();
     sessionStorage.clear();
     setAddress(null);
   }
 
   // 블록 번호 확인
   const getBlockNumber = async () => {
-    setBlockNumber(await cav.klay.getBlockNumber());
+    setBlockNumber(await caver.klay.getBlockNumber());
   }
 
   // count 값 확인
   const getCount = async () => {
-    setCount(await getContractInstance().methods.count().call());
+    setCount(await getCountContract().methods.count().call());
   }
 
   // count +1 tx
   const plusCount = () => {
     setPending(true);
-    getContractInstance().methods.plus().send({
+    getCountContract().methods.plus().send({
       from: address,
       gas: '200000'
     })
@@ -87,7 +96,7 @@ export default function App() {
   // count -1 tx
   const minusCount = () => {
     setPending(true);
-    getContractInstance().methods.minus().send({
+    getCountContract().methods.minus().send({
       from: address,
       gas: '200000'
     })
@@ -129,7 +138,7 @@ export default function App() {
     const isValidKeystore = parsedKeystore.version
       && parsedKeystore.id
       && parsedKeystore.address
-      && crypto;
+      && parsedKeystore.crypto;
     
     return isValidKeystore;
   }
